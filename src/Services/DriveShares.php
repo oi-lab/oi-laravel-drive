@@ -41,14 +41,14 @@ class DriveShares
 
     /**
      * Shares the folder with the entity, on behalf of `$by` (the signed-in
-     * user by default), who must be allowed to reach it (ShareTargets).
+     * user by default), who must be allowed to reach it (ShareTargets);
+     * sharing again with an entity already shared with changes nothing.
      *
      * @throws DriveException when the entity owns the drive, is of another class or out of reach
      */
     public function share(Folder $folder, Model $shareable, ?Authenticatable $by = null): DriveFolderShare
     {
         $by ??= Auth::user();
-        $this->assertShareable($folder, $shareable, $by);
 
         $share = OiLaravelDrive::shareModel()::query()->firstOrNew([
             'folder_id' => $folder->getKey(),
@@ -57,6 +57,7 @@ class DriveShares
         ]);
 
         if (! $share->exists) {
+            $this->assertShareable($folder, $shareable, $by);
             $share->user_id = $by?->getAuthIdentifier();
             $share->save();
             event(new DriveFolderShared($folder, $shareable));
@@ -80,7 +81,8 @@ class DriveShares
     }
 
     /**
-     * Shares the folder with exactly these entities.
+     * Shares the folder with exactly these entities. An entity it is already
+     * shared with is kept even when it is no longer among the targets.
      *
      * @param  iterable<Model>  $shareables
      *
@@ -90,8 +92,9 @@ class DriveShares
     {
         $by ??= Auth::user();
         $wanted = collect($shareables)->keyBy(fn (Model $shareable): string => $this->keyOf($shareable));
+        $existing = $this->sharesQuery($folder)->get()->map(fn (DriveFolderShare $share): string => $share->shareable_type.':'.$share->shareable_id);
 
-        $wanted->each(fn (Model $shareable) => $this->assertShareable($folder, $shareable, $by));
+        $wanted->except($existing->all())->each(fn (Model $shareable) => $this->assertShareable($folder, $shareable, $by));
 
         $this->sharesQuery($folder)->with('shareable')->get()
             ->reject(fn (DriveFolderShare $share): bool => $wanted->has($share->shareable_type.':'.$share->shareable_id))
