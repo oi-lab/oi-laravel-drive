@@ -1,0 +1,7 @@
+{
+    "type": "package",
+    "name": "oi-lab/oi-laravel-drive",
+    "title": "OI Laravel Drive",
+    "description": "File spaces with folders owned by an entity, with API, MCP tools and events",
+    "order": 35
+}
