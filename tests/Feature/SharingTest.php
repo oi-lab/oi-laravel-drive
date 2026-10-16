@@ -1,7 +1,11 @@
 <?php
 
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Event;
+use OiLab\OiLaravelAttachments\Models\Folder;
+use OiLab\OiLaravelDrive\Contracts\ShareTargets;
 use OiLab\OiLaravelDrive\Events\DriveFolderShared;
 use OiLab\OiLaravelDrive\Events\DriveFolderUnshared;
 use OiLab\OiLaravelDrive\Exceptions\DriveException;
@@ -113,6 +117,27 @@ it('refuses to share a folder with the entity owning its drive or with another k
 it('finds an entity to share with by key or by name', function () {
     $clients = $this->folders->create($this->drive, 'Clients');
 
-    expect($this->shares->findShareable($clients, $this->partner->id)->is($this->partner))->toBeTrue()
-        ->and($this->shares->findShareable($clients, 'Partenaire')->is($this->partner))->toBeTrue();
+    expect($this->shares->findShareable($this->user, $clients, $this->partner->id)->is($this->partner))->toBeTrue()
+        ->and($this->shares->findShareable($this->user, $clients, 'Partenaire')->is($this->partner))->toBeTrue()
+        ->and(fn () => $this->shares->findShareable($this->user, $clients, 'Équipe'))->toThrow(ModelNotFoundException::class);
+
+    $this->shares->share($clients, $this->partner);
+
+    expect($this->shares->findShared($clients, 'Partenaire')->is($this->partner))->toBeTrue();
+});
+
+it('only shares with the entities the bound ShareTargets lets the user reach', function () {
+    $clients = $this->folders->create($this->drive, 'Clients');
+    $this->app->bind(ShareTargets::class, fn () => new class implements ShareTargets
+    {
+        public function query(Authenticatable $user, Folder $folder, string $model): Builder
+        {
+            return $model::query()->where('name', '!=', 'Partenaire');
+        }
+    });
+    $this->app->forgetScopedInstances();
+    $shares = app(DriveShares::class);
+
+    expect(fn () => $shares->share($clients, $this->partner, $this->user))->toThrow(DriveException::class)
+        ->and(fn () => $shares->findShareable($this->user, $clients, 'Partenaire'))->toThrow(ModelNotFoundException::class);
 });

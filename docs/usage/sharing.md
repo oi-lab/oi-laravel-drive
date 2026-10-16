@@ -29,7 +29,23 @@ $shares->contents($root, $folder);               // a listing whose breadcrumbs 
 
 A folder is shared with entities of `sharing.model` — by default the class of the entity owning the drive (a Team drive is shared with other teams). Sharing with the owning entity itself is refused. A member of the entity reads the folder from that entity only while `driveable.current_only` is on, as for drives.
 
-`findShareable($folder, $keyOrName)` finds an entity by key or by its `sharing.name_attribute`.
+`findShareable($user, $folder, $keyOrName)` finds an entity the user may share with, by key or by its `sharing.name_attribute`; `findShared($folder, $keyOrName)` one the folder is shared with.
+
+## Who may be shared with
+
+`share()` and `sync()` only accept the entities `targets($user, $folder)` gives: the query of the bound `OiLab\OiLaravelDrive\Contracts\ShareTargets` (`sharing.targets`), the entity owning the drive left out. The default `AnyShareTarget` allows every entity of the class — fine for a single tenant. In a multi-tenant application, bind your own:
+
+```php
+class TeamShareTargets implements ShareTargets
+{
+    public function query(Authenticatable $user, Folder $folder, string $model): Builder
+    {
+        return $model::query()->whereIn('id', $user->teams()->pluck('teams.id'));
+    }
+}
+```
+
+The check is skipped when nobody is signed in and no `$by` user is given (a command, a job).
 
 The package does not authorize the share itself: check `Gate::authorize('update', $drive)` (or stricter) before sharing, and `reaches()` before showing a shared item to a non-member.
 

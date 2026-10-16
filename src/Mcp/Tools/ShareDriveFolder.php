@@ -27,11 +27,11 @@ class ShareDriveFolder extends DriveTool
         $folder = $this->folder($request, (string) $request->get('folder_id'), 'update');
 
         foreach ((array) $request->get('remove', []) as $target) {
-            $shares->unshare($folder, $shares->findShareable($folder, $target));
+            $shares->unshare($folder, $shares->findShared($folder, $target));
         }
 
         foreach ((array) $request->get('add', []) as $target) {
-            $shares->share($folder, $shares->findShareable($folder, $target), $this->user($request));
+            $shares->share($folder, $shares->findShareable($this->user($request), $folder, $target), $this->user($request));
         }
 
         return $this->json($shares->sharing($folder));

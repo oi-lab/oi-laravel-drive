@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Folders shared read-only with other entities (`drive_folder_shares`, `DriveShares`): subfolders and files included, `sharedWith()`, `reaches()`, listings whose breadcrumbs start at the shared folder
+- `ShareTargets` contract (`sharing.targets`) limiting the entities a user may share with, to keep tenants apart
 - Public link of a folder (`drive_folder_links`, `DriveLinks`): token, hashed password, expiry date, regeneration, visit counter, `unlockKey()` for the visitor's session, URL through the host route `links.route`
 - ZIP download of a folder tree (`DriveArchives`), limited by `links.archive_max_bytes`
 - `shares_count` and `has_link` on `DriveFolderData`

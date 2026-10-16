@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use OiLab\OiLaravelAttachments\Models\File;
 use OiLab\OiLaravelAttachments\Models\Folder;
 use OiLab\OiLaravelDrive\Contracts\DriveableResolver;
+use OiLab\OiLaravelDrive\Contracts\ShareTargets;
 use OiLab\OiLaravelDrive\Data\DriveFolderData;
 use OiLab\OiLaravelDrive\Data\DriveFolderSharingData;
 use OiLab\OiLaravelDrive\Data\DriveListingData;
@@ -35,14 +36,19 @@ class DriveShares
         protected DriveLinks $links,
         protected DriveableResolver $resolver,
         protected DrivePresenter $presenter,
+        protected ShareTargets $targets,
     ) {}
 
     /**
-     * @throws DriveException when the entity owns the drive or is of another class
+     * Shares the folder with the entity, on behalf of `$by` (the signed-in
+     * user by default), who must be allowed to reach it (ShareTargets).
+     *
+     * @throws DriveException when the entity owns the drive, is of another class or out of reach
      */
     public function share(Folder $folder, Model $shareable, ?Authenticatable $by = null): DriveFolderShare
     {
-        $this->assertShareable($folder, $shareable);
+        $by ??= Auth::user();
+        $this->assertShareable($folder, $shareable, $by);
 
         $share = OiLaravelDrive::shareModel()::query()->firstOrNew([
             'folder_id' => $folder->getKey(),
@@ -51,7 +57,7 @@ class DriveShares
         ]);
 
         if (! $share->exists) {
-            $share->user_id = ($by ?? Auth::user())?->getAuthIdentifier();
+            $share->user_id = $by?->getAuthIdentifier();
             $share->save();
             event(new DriveFolderShared($folder, $shareable));
         }
@@ -82,9 +88,10 @@ class DriveShares
      */
     public function sync(Folder $folder, iterable $shareables, ?Authenticatable $by = null): void
     {
+        $by ??= Auth::user();
         $wanted = collect($shareables)->keyBy(fn (Model $shareable): string => $this->keyOf($shareable));
 
-        $wanted->each(fn (Model $shareable) => $this->assertShareable($folder, $shareable));
+        $wanted->each(fn (Model $shareable) => $this->assertShareable($folder, $shareable, $by));
 
         $this->sharesQuery($folder)->with('shareable')->get()
             ->reject(fn (DriveFolderShare $share): bool => $wanted->has($share->shareable_type.':'.$share->shareable_id))
@@ -110,15 +117,46 @@ class DriveShares
     }
 
     /**
-     * An entity a folder may be shared with, by key or by name.
+     * The entities the user may share the folder with, the entity owning the
+     * drive left out.
+     *
+     * @return Builder<Model>
+     */
+    public function targets(Authenticatable $user, Folder $folder): Builder
+    {
+        $model = $this->shareableModel($folder);
+        $owner = $this->drives->driveOf($folder)->driveable;
+
+        return $this->targets->query($user, $folder, $model)
+            ->when($owner instanceof $model, fn (Builder $query) => $query->whereKeyNot($owner->getKey()));
+    }
+
+    /**
+     * An entity the user may share the folder with, by key or by name.
      *
      * @throws ModelNotFoundException
      */
-    public function findShareable(Folder $folder, int|string $keyOrName): Model
+    public function findShareable(Authenticatable $user, Folder $folder, int|string $keyOrName): Model
+    {
+        return $this->targets($user, $folder)
+            ->where(fn (Builder $query) => $query
+                ->when(is_numeric($keyOrName), fn (Builder $query) => $query->whereKey((int) $keyOrName))
+                ->orWhere(OiLaravelDrive::shareableNameAttribute(), (string) $keyOrName))
+            ->firstOrFail();
+    }
+
+    /**
+     * An entity the folder is shared with, by key or by name.
+     *
+     * @throws ModelNotFoundException
+     */
+    public function findShared(Folder $folder, int|string $keyOrName): Model
     {
         $model = $this->shareableModel($folder);
+        $keys = $this->sharesQuery($folder)->where('shareable_type', (new $model)->getMorphClass())->pluck('shareable_id');
 
         return $model::query()
+            ->whereKey($keys)
             ->where(fn (Builder $query) => $query
                 ->when(is_numeric($keyOrName), fn (Builder $query) => $query->whereKey((int) $keyOrName))
                 ->orWhere(OiLaravelDrive::shareableNameAttribute(), (string) $keyOrName))
@@ -292,7 +330,7 @@ class DriveShares
     /**
      * @throws DriveException
      */
-    protected function assertShareable(Folder $folder, Model $shareable): void
+    protected function assertShareable(Folder $folder, Model $shareable, ?Authenticatable $by): void
     {
         if (! is_a($shareable, $this->shareableModel($folder))) {
             throw DriveException::shareTargetRefused();
@@ -300,6 +338,10 @@ class DriveShares
 
         if ($this->drives->driveOf($folder)->driveable?->is($shareable)) {
             throw DriveException::shareWithOwner();
+        }
+
+        if ($by !== null && ! $this->targets($by, $folder)->whereKey($shareable->getKey())->exists()) {
+            throw DriveException::shareTargetRefused();
         }
 
         $this->folders->assertUsable($folder, $this->drives->driveOf($folder));

@@ -70,7 +70,8 @@ Sharing (read-only, subfolders and files included, nothing while the folder is t
 
 ```php
 $shares = app(DriveShares::class);
-$shares->share($folder, $team); $shares->unshare($folder, $team); $shares->sync($folder, [$a, $b]);
+$shares->share($folder, $team, $by); $shares->unshare($folder, $team); $shares->sync($folder, [$a, $b]);
+$shares->targets($user, $folder);              // who the user may share with: bound ShareTargets (`sharing.targets`)
 $shares->sharedWith($user);                     // topmost folders shared with the user's current entity
 $shares->reaches($user, $folderOrFile);         // the policy does NOT know about shares: check this for non-members
 $shares->contents($root, $folder);              // breadcrumbs cut at the shared root
@@ -145,7 +146,7 @@ php artisan drive:prune-uploads [--days=7] # hourly when uploads.enabled
 | `api.enabled` / `prefix` / `name` / `middleware` | `true`, `api/drive`, `drive.api.`, `['api','auth:sanctum']` | `OI_DRIVE_API` |
 | `signed_routes.prefix` / `name` / `middleware` | `drive`, `drive.`, `['throttle:60,1']` | |
 | `uploads.enabled` / `ttl_minutes` / `inline_max_bytes` | `true`, `10`, 1 MB | `OI_DRIVE_UPLOADS` |
-| `sharing.model` / `name_attribute` | `null` (the drive's entity class) / `name` | |
+| `sharing.model` / `name_attribute` / `targets` | `null` (the drive's entity class) / `name` / `AnyShareTarget` | |
 | `links.route` / `password_min_length` / `archive_max_bytes` | `null`, `6`, 500 MB | `OI_DRIVE_LINK_ROUTE`, `OI_DRIVE_ARCHIVE_MAX_BYTES` |
 | `mcp.naming` | `kebab` | `OI_DRIVE_MCP_NAMING` |
 

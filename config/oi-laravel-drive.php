@@ -7,6 +7,7 @@ use OiLab\OiLaravelDrive\Models\DriveFolderShare;
 use OiLab\OiLaravelDrive\Models\DriveUpload;
 use OiLab\OiLaravelDrive\Policies\DrivePolicy;
 use OiLab\OiLaravelDrive\Resolvers\ConfigurableDriveableResolver;
+use OiLab\OiLaravelDrive\Sharing\AnyShareTarget;
 
 return [
     /*
@@ -144,12 +145,15 @@ return [
     | A folder can be shared, read-only, with other entities: their members
     | read it, its subfolders and its files. `model`: the class a folder is
     | shared with (null: the class of the entity owning the drive).
-    | `name_attribute` labels it.
+    | `name_attribute` labels it. `targets`: a ShareTargets class listing the
+    | entities a user may share with — the default allows every entity of
+    | the class; bind your own to keep tenants apart.
     |
     */
     'sharing' => [
         'model' => null,
         'name_attribute' => 'name',
+        'targets' => AnyShareTarget::class,
     ],
 
     /*
