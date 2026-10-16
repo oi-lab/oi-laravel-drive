@@ -14,15 +14,11 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         dependency-version: [prefer-stable]
+        php: [8.2, 8.3, 8.4]
         # laravel/mcp (dev dependency of the MCP tool tests) needs Laravel 12+
-        include:
+        laravel: [12.*, 13.*]
+        exclude:
           - php: 8.2
-            laravel: 12.*
-          - php: 8.3
-            laravel: 12.*
-          - php: 8.3
-            laravel: 13.*
-          - php: 8.4
             laravel: 13.*
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
