@@ -2,7 +2,7 @@
 title: "MCP Tools"
 description: "Register the drive tools in a laravel/mcp server"
 section: usage
-order: 6
+order: 7
 ---
 
 # MCP Tools
@@ -31,6 +31,9 @@ Append `DriveTools::INSTRUCTIONS` to the server instructions. The caller is the 
 | `upload-drive-file` | Small inline file (text or base64) |
 | `update-drive-file`, `delete-drive-file` | Files and their folders |
 | `list-drive-trash`, `restore-drive-item` | Trash |
+| `get-drive-folder-sharing` | Entities a folder is shared with, its public link |
+| `share-drive-folder` | Share or unshare a folder (entity key or name) |
+| `update-drive-folder-link` | Open, protect, expire, regenerate or close the public link |
 | `list-drives` | Only with `drives.multiple` |
 
 `mcp.naming = snake` names them `list_drive_folder`… A server with its own tool base class can wrap each tool: `name()`, `description()`, `schema()` and `handle()` are public.

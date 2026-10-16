@@ -14,9 +14,12 @@ an owner, a date of creation, a trash, a JSON API, MCP tools and events.
 | attachments `File` | `files` | Stored on `files.disk` under `drive/{drive uuid}/`; soft deletes = trash |
 | attachments `Attachment` | `attachments` | Collection `drive`: files a file in a folder (`attachable` = folder) |
 | `OiLab\OiLaravelDrive\Models\DriveUpload` | `drive_uploads` | One-time upload link opened by an assistant |
+| `OiLab\OiLaravelDrive\Models\DriveFolderShare` | `drive_folder_shares` | Folder shared read-only with another entity (`shareable` morph) |
+| `OiLab\OiLaravelDrive\Models\DriveFolderLink` | `drive_folder_links` | Public link of a folder: `token`, hashed `password`, `expires_at`, `views_count` |
 
 Runtime relations added to the attachments models (no change to their classes):
-`$folder->driveEntry`, `$file->driveEntry`, `$file->driveFolders` (active folders only), `$folder->driveFiles`.
+`$folder->driveEntry`, `$file->driveEntry`, `$file->driveFolders` (active folders only), `$folder->driveFiles`,
+`$folder->driveShares`, `$folder->driveLink`.
 
 Rules:
 - A file filed in no active folder is at the **root**. One file may be in several folders.
@@ -63,6 +66,23 @@ $drives->findFolder($uuid, withTrashed: false); $drives->findFile($uuid); $drive
 app(DrivePresenter::class)->file($file);        // DriveFileData (folder_ids, owner, created_at…)
 ```
 
+Sharing (read-only, subfolders and files included, nothing while the folder is trashed):
+
+```php
+$shares = app(DriveShares::class);
+$shares->share($folder, $team); $shares->unshare($folder, $team); $shares->sync($folder, [$a, $b]);
+$shares->sharedWith($user);                     // topmost folders shared with the user's current entity
+$shares->reaches($user, $folderOrFile);         // the policy does NOT know about shares: check this for non-members
+$shares->contents($root, $folder);              // breadcrumbs cut at the shared root
+$links = app(DriveLinks::class);
+$link = $links->open($folder); $links->setPassword($link, $pw); $links->setExpiry($link, $date);
+$links->regenerate($link); $links->revoke($folder); $links->find($token); $links->checkPassword($link, $pw);
+$links->recordView($link); $link->unlockKey();  // keep unlockKey() in the visitor's session
+app(DriveArchives::class)->download($folder);   // ZIP, max links.archive_max_bytes
+```
+
+The host serves the public page (`links.route` names its route, `token` parameter).
+
 Failures throw `OiLab\OiLaravelDrive\Exceptions\DriveException` (`rule`, `status`, French message), rendered
 as `{error, message}` JSON on API requests.
 
@@ -86,7 +106,8 @@ $this->tools = [...DriveTools::all(), ...];     // in the host's laravel/mcp Ser
 Tools (base class `Mcp\Tools\DriveTool`, caller = token user, `drive_id` optional): `list-drive-folder`,
 `search-drive`, `get-drive-file`, `list-drive-trash`, `get-drive-upload-status`, `create-drive-folder`,
 `update-drive-folder`, `delete-drive-folder`, `request-drive-upload`, `upload-drive-file`, `update-drive-file`,
-`delete-drive-file`, `restore-drive-item` (+ `list-drives` in multiple mode). `mcp.naming = snake` gives
+`delete-drive-file`, `restore-drive-item`, `get-drive-folder-sharing`, `share-drive-folder`,
+`update-drive-folder-link` (+ `list-drives` in multiple mode). `mcp.naming = snake` gives
 `list_drive_folder`. A host with its own tool base class can wrap them: each tool's `name()`, `description()`,
 `schema()` and `handle()` are public.
 
@@ -97,7 +118,7 @@ route (or dropped on the signed `drive.uploads.page` page) and becomes a drive f
 
 `OiLab\OiLaravelDrive\Events\*`: `DriveCreated|Updated|Deleted`, `DriveFolderCreated|Updated|Moved|Trashed|
 Restored|Deleted`, `DriveFileCreated|Updated|Trashed|Restored|Deleted`, `DriveFileAttached|Detached`,
-`DriveEntryOwnerChanged`. `*Deleted` events carry Data snapshots (`DriveFolderData`, `DriveFileData`,
+`DriveEntryOwnerChanged`, `DriveFolderShared|Unshared`, `DriveFolderLinkSaved|Revoked`. `*Deleted` events carry Data snapshots (`DriveFolderData`, `DriveFileData`,
 `DriveData`). Use them for Scout / oi-laravel-raggable indexing.
 
 ## Commands
@@ -124,6 +145,8 @@ php artisan drive:prune-uploads [--days=7] # hourly when uploads.enabled
 | `api.enabled` / `prefix` / `name` / `middleware` | `true`, `api/drive`, `drive.api.`, `['api','auth:sanctum']` | `OI_DRIVE_API` |
 | `signed_routes.prefix` / `name` / `middleware` | `drive`, `drive.`, `['throttle:60,1']` | |
 | `uploads.enabled` / `ttl_minutes` / `inline_max_bytes` | `true`, `10`, 1 MB | `OI_DRIVE_UPLOADS` |
+| `sharing.model` / `name_attribute` | `null` (the drive's entity class) / `name` | |
+| `links.route` / `password_min_length` / `archive_max_bytes` | `null`, `6`, 500 MB | `OI_DRIVE_LINK_ROUTE`, `OI_DRIVE_ARCHIVE_MAX_BYTES` |
 | `mcp.naming` | `kebab` | `OI_DRIVE_MCP_NAMING` |
 
 ## Host Integration Checklist

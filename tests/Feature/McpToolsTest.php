@@ -6,14 +6,17 @@ use OiLab\OiLaravelDrive\Mcp\Tools\CreateDriveFolder;
 use OiLab\OiLaravelDrive\Mcp\Tools\DeleteDriveFile;
 use OiLab\OiLaravelDrive\Mcp\Tools\DeleteDriveFolder;
 use OiLab\OiLaravelDrive\Mcp\Tools\GetDriveFile;
+use OiLab\OiLaravelDrive\Mcp\Tools\GetDriveFolderSharing;
 use OiLab\OiLaravelDrive\Mcp\Tools\GetDriveUploadStatus;
 use OiLab\OiLaravelDrive\Mcp\Tools\ListDriveFolder;
 use OiLab\OiLaravelDrive\Mcp\Tools\ListDriveTrash;
 use OiLab\OiLaravelDrive\Mcp\Tools\RequestDriveUpload;
 use OiLab\OiLaravelDrive\Mcp\Tools\RestoreDriveItem;
 use OiLab\OiLaravelDrive\Mcp\Tools\SearchDrive;
+use OiLab\OiLaravelDrive\Mcp\Tools\ShareDriveFolder;
 use OiLab\OiLaravelDrive\Mcp\Tools\UpdateDriveFile;
 use OiLab\OiLaravelDrive\Mcp\Tools\UpdateDriveFolder;
+use OiLab\OiLaravelDrive\Mcp\Tools\UpdateDriveFolderLink;
 use OiLab\OiLaravelDrive\Mcp\Tools\UploadDriveFile;
 use OiLab\OiLaravelDrive\Models\DriveUpload;
 use OiLab\OiLaravelDrive\Services\DriveFiles;
@@ -34,7 +37,7 @@ it('names the tools in kebab or snake case', function () {
     config(['oi-laravel-drive.mcp.naming' => 'snake']);
 
     expect((new ListDriveFolder)->name())->toBe('list_drive_folder')
-        ->and(DriveTools::all())->toHaveCount(13);
+        ->and(DriveTools::all())->toHaveCount(16);
 });
 
 it('creates a folder, writes a text file in it, then reads it back', function () {
@@ -173,4 +176,39 @@ it('refuses the folders of another entity', function () {
     DriveServer::actingAs($stranger)
         ->tool(GetDriveFile::class, ['file_id' => '00000000-0000-0000-0000-000000000000'])
         ->assertHasErrors(['introuvable']);
+});
+
+it('shares a folder with a team by name, opens a protected link, then closes both', function () {
+    $folder = app(DriveFolders::class)->create($this->drive, 'Presse');
+    Team::query()->create(['name' => 'Partenaire']);
+
+    DriveServer::actingAs($this->user)
+        ->tool(ShareDriveFolder::class, ['folder_id' => $folder->uuid, 'add' => ['Partenaire']])
+        ->assertOk()
+        ->assertSee('Partenaire');
+
+    DriveServer::actingAs($this->user)
+        ->tool(UpdateDriveFolderLink::class, ['folder_id' => $folder->uuid, 'enabled' => true, 'password' => 'sesame-123', 'expires_at' => '2099-01-01T00:00:00+01:00'])
+        ->assertOk()
+        ->assertSee('"has_password":true')
+        ->assertDontSee('sesame-123');
+
+    DriveServer::actingAs($this->user)
+        ->tool(UpdateDriveFolderLink::class, ['folder_id' => $folder->uuid, 'enabled' => false])
+        ->assertOk()
+        ->assertSee('"link":null');
+
+    DriveServer::actingAs($this->user)
+        ->tool(ShareDriveFolder::class, ['folder_id' => $folder->uuid, 'remove' => ['Partenaire']])
+        ->assertOk()
+        ->assertSee('"shares":[]');
+
+    DriveServer::actingAs($this->user)
+        ->tool(ShareDriveFolder::class, ['folder_id' => $folder->uuid, 'add' => ['Inconnue']])
+        ->assertHasErrors();
+
+    DriveServer::actingAs($this->user)
+        ->tool(GetDriveFolderSharing::class, ['folder_id' => $folder->uuid])
+        ->assertOk()
+        ->assertSee('Presse');
 });

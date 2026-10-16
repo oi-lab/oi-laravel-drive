@@ -18,7 +18,8 @@ A file space with folders for any entity of your Laravel application — a Team,
 - **Trash** — deletions go to the trash, restorable; optional purge after X days
 - **Folder deletion** — optionally with the files filed only in the deleted tree; shared files are only taken out
 - **JSON API** — ready-made routes, or switch them off and call the services from your own controllers
-- **MCP tools** — 13 tools for `laravel/mcp` servers, including one-time upload links for binaries
+- **Sharing** — share a folder read-only with other entities, or open a public link with an optional password and expiry date; download a folder as a ZIP
+- **MCP tools** — 16 tools for `laravel/mcp` servers, including one-time upload links for binaries
 - **Events** — one per action, to index, notify or audit from other modules
 - **Pluggable access** — a resolver for the current entity and its members, a replaceable policy
 
@@ -31,6 +32,8 @@ A file space with folders for any entity of your Laravel application — a Team,
 | `Folder` / `File` | `folders` / `files` | The models of oi-laravel-attachments, unchanged |
 | `Attachment` | `attachments` | Files a file in a folder (collection `drive`) |
 | `DriveUpload` | `drive_uploads` | An upload link opened by an assistant |
+| `DriveFolderShare` | `drive_folder_shares` | A folder shared read-only with another entity |
+| `DriveFolderLink` | `drive_folder_links` | The public link of a folder: token, hashed password, expiry, visits |
 
 The drive adds `driveEntry`, `driveFolders` and `driveFiles` relations to the attachments models at runtime, so your own `Folder`/`File` subclasses keep working. Public identifiers are UUIDs.
 
@@ -142,6 +145,17 @@ $drives->setOwner($file, $colleague);
 $drives->setCreatedAt($file, Carbon::parse('2020-01-01'));
 ```
 
+### Sharing
+
+```php
+app(DriveShares::class)->share($folder, $partnerTeam);   // read-only, subfolders and files included
+app(DriveShares::class)->sharedWith($user);              // folders shared with the user's current entity
+$link = app(DriveLinks::class)->open($folder);           // public link; setPassword(), setExpiry(), regenerate(), revoke()
+app(DriveArchives::class)->download($folder);            // the folder as a ZIP
+```
+
+The host serves the public page (`links.route`). See `docs/usage/sharing.md`.
+
 ## JSON API
 
 With `api.enabled`, under `api.prefix` (identifiers are UUIDs, `drive` is optional and defaults to the current entity's drive):
@@ -175,13 +189,13 @@ class AppServer extends Server
 }
 ```
 
-Add `DriveTools::INSTRUCTIONS` to the server instructions. The tools: `list-drive-folder`, `search-drive`, `get-drive-file` (metadata, temporary link, text), `list-drive-trash`, `get-drive-upload-status`, `create-drive-folder`, `update-drive-folder`, `delete-drive-folder`, `request-drive-upload` (one-time signed PUT link or drag-and-drop page), `upload-drive-file` (inline text or base64), `update-drive-file`, `delete-drive-file`, `restore-drive-item`, plus `list-drives` in multiple mode.
+Add `DriveTools::INSTRUCTIONS` to the server instructions. The tools: `list-drive-folder`, `search-drive`, `get-drive-file` (metadata, temporary link, text), `list-drive-trash`, `get-drive-upload-status`, `create-drive-folder`, `update-drive-folder`, `delete-drive-folder`, `request-drive-upload` (one-time signed PUT link or drag-and-drop page), `upload-drive-file` (inline text or base64), `update-drive-file`, `delete-drive-file`, `restore-drive-item`, `get-drive-folder-sharing`, `share-drive-folder`, `update-drive-folder-link`, plus `list-drives` in multiple mode.
 
 ## Events
 
 All in `OiLab\OiLaravelDrive\Events`, with `SerializesModels` so listeners may be queued:
 
-`DriveCreated`, `DriveUpdated`, `DriveDeleted`, `DriveFolderCreated`, `DriveFolderUpdated`, `DriveFolderMoved`, `DriveFolderTrashed`, `DriveFolderRestored`, `DriveFolderDeleted`, `DriveFileCreated`, `DriveFileUpdated`, `DriveFileTrashed`, `DriveFileRestored`, `DriveFileDeleted`, `DriveFileAttached`, `DriveFileDetached`, `DriveEntryOwnerChanged`.
+`DriveCreated`, `DriveUpdated`, `DriveDeleted`, `DriveFolderCreated`, `DriveFolderUpdated`, `DriveFolderMoved`, `DriveFolderTrashed`, `DriveFolderRestored`, `DriveFolderDeleted`, `DriveFileCreated`, `DriveFileUpdated`, `DriveFileTrashed`, `DriveFileRestored`, `DriveFileDeleted`, `DriveFileAttached`, `DriveFileDetached`, `DriveEntryOwnerChanged`, `DriveFolderShared`, `DriveFolderUnshared`, `DriveFolderLinkSaved`, `DriveFolderLinkRevoked`.
 
 Permanent deletions carry a Data snapshot (`DriveFolderData`, `DriveFileData`), the model being gone. Listen to them to feed Laravel Scout or `oi-laravel-raggable`.
 

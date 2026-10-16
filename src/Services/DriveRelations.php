@@ -3,6 +3,8 @@
 namespace OiLab\OiLaravelDrive\Services;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use OiLab\OiLaravelAttachments\Models\File;
@@ -17,7 +19,9 @@ use OiLab\OiLaravelDrive\OiLaravelDrive;
  * - `driveEntry` (both): the drive, the owner and the date of the item;
  * - `driveFolders` (file): the folders a file is filed in, through the
  *   `attachments` table (collection `files.collection`);
- * - `driveFiles` (folder): the files filed in a folder.
+ * - `driveFiles` (folder): the files filed in a folder;
+ * - `driveShares` (folder): the entities a folder is shared with;
+ * - `driveLink` (folder): the public link of a folder.
  */
 class DriveRelations
 {
@@ -35,5 +39,11 @@ class DriveRelations
         Folder::resolveRelationUsing('driveFiles', static fn (Model $folder): MorphToMany => $folder
             ->morphToMany(OiLaravelDrive::fileModel(), 'attachable', 'attachments', 'attachable_id', 'file_id')
             ->wherePivot('collection', OiLaravelDrive::collection()));
+
+        Folder::resolveRelationUsing('driveShares', static fn (Model $folder): HasMany => $folder
+            ->hasMany(OiLaravelDrive::shareModel(), 'folder_id'));
+
+        Folder::resolveRelationUsing('driveLink', static fn (Model $folder): HasOne => $folder
+            ->hasOne(OiLaravelDrive::linkModel(), 'folder_id'));
     }
 }

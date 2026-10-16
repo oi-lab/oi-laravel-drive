@@ -11,11 +11,14 @@ use OiLab\OiLaravelDrive\Console\Commands\PruneUploadsCommand;
 use OiLab\OiLaravelDrive\Console\Commands\PurgeTrashCommand;
 use OiLab\OiLaravelDrive\Contracts\DriveableResolver;
 use OiLab\OiLaravelDrive\Resolvers\ConfigurableDriveableResolver;
+use OiLab\OiLaravelDrive\Services\DriveArchives;
 use OiLab\OiLaravelDrive\Services\DriveFiles;
 use OiLab\OiLaravelDrive\Services\DriveFolders;
+use OiLab\OiLaravelDrive\Services\DriveLinks;
 use OiLab\OiLaravelDrive\Services\DriveManager;
 use OiLab\OiLaravelDrive\Services\DrivePresenter;
 use OiLab\OiLaravelDrive\Services\DriveRelations;
+use OiLab\OiLaravelDrive\Services\DriveShares;
 use OiLab\OiLaravelDrive\Services\DriveUploads;
 
 class OiLaravelDriveServiceProvider extends ServiceProvider
@@ -28,7 +31,7 @@ class OiLaravelDriveServiceProvider extends ServiceProvider
             config('oi-laravel-drive.driveable.resolver', ConfigurableDriveableResolver::class)
         ));
 
-        foreach ([DrivePresenter::class, DriveManager::class, DriveFiles::class, DriveFolders::class, DriveUploads::class] as $service) {
+        foreach ([DrivePresenter::class, DriveManager::class, DriveFiles::class, DriveFolders::class, DriveUploads::class, DriveShares::class, DriveLinks::class, DriveArchives::class] as $service) {
             $this->app->scoped($service);
         }
     }

@@ -2,6 +2,8 @@
 
 use OiLab\OiLaravelDrive\Models\Drive;
 use OiLab\OiLaravelDrive\Models\DriveEntry;
+use OiLab\OiLaravelDrive\Models\DriveFolderLink;
+use OiLab\OiLaravelDrive\Models\DriveFolderShare;
 use OiLab\OiLaravelDrive\Models\DriveUpload;
 use OiLab\OiLaravelDrive\Policies\DrivePolicy;
 use OiLab\OiLaravelDrive\Resolvers\ConfigurableDriveableResolver;
@@ -34,6 +36,8 @@ return [
         'drive' => Drive::class,
         'entry' => DriveEntry::class,
         'upload' => DriveUpload::class,
+        'share' => DriveFolderShare::class,
+        'link' => DriveFolderLink::class,
     ],
 
     /*
@@ -130,6 +134,40 @@ return [
     'trash' => [
         'enabled' => (bool) env('OI_DRIVE_TRASH', true),
         'purge_after_days' => env('OI_DRIVE_TRASH_PURGE_DAYS'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sharing
+    |--------------------------------------------------------------------------
+    |
+    | A folder can be shared, read-only, with other entities: their members
+    | read it, its subfolders and its files. `model`: the class a folder is
+    | shared with (null: the class of the entity owning the drive).
+    | `name_attribute` labels it.
+    |
+    */
+    'sharing' => [
+        'model' => null,
+        'name_attribute' => 'name',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Public links
+    |--------------------------------------------------------------------------
+    |
+    | A folder can have one public link, optionally protected by a password
+    | and an expiry date. The package stores the link; the host serves the
+    | page. `route`: the name of the host route showing a link, taking a
+    | `token` parameter, used to give its URL (null: no URL).
+    | `archive_max_bytes`: the largest folder downloaded as a ZIP.
+    |
+    */
+    'links' => [
+        'route' => env('OI_DRIVE_LINK_ROUTE'),
+        'password_min_length' => 6,
+        'archive_max_bytes' => (int) env('OI_DRIVE_ARCHIVE_MAX_BYTES', 500 * 1024 * 1024),
     ],
 
     /*

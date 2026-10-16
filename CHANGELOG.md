@@ -5,6 +5,17 @@ All notable changes to `oi-lab/oi-laravel-drive` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-17
+
+### Added
+
+- Folders shared read-only with other entities (`drive_folder_shares`, `DriveShares`): subfolders and files included, `sharedWith()`, `reaches()`, listings whose breadcrumbs start at the shared folder
+- Public link of a folder (`drive_folder_links`, `DriveLinks`): token, hashed password, expiry date, regeneration, visit counter, `unlockKey()` for the visitor's session, URL through the host route `links.route`
+- ZIP download of a folder tree (`DriveArchives`), limited by `links.archive_max_bytes`
+- `shares_count` and `has_link` on `DriveFolderData`
+- MCP tools `get-drive-folder-sharing`, `share-drive-folder`, `update-drive-folder-link`
+- Events `DriveFolderShared`, `DriveFolderUnshared`, `DriveFolderLinkSaved`, `DriveFolderLinkRevoked`
+
 ## [1.0.0] - 2026-10-16
 
 ### Added

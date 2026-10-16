@@ -90,6 +90,33 @@ class DriveException extends RuntimeException
         return new self('Les dépôts par lien sont désactivés.', 'uploads_disabled', 404);
     }
 
+    public static function shareWithOwner(): self
+    {
+        return new self('Ce dossier appartient déjà à cette entité : inutile de le partager avec elle.', 'share_with_owner');
+    }
+
+    public static function shareTargetRefused(): self
+    {
+        return new self('Ce dossier ne peut pas être partagé avec cette entité.', 'share_target_refused');
+    }
+
+    public static function passwordTooShort(int $minLength): self
+    {
+        return new self("Le mot de passe doit compter au moins {$minLength} caractères.", 'password_too_short');
+    }
+
+    public static function archiveTooLarge(int $maxBytes): self
+    {
+        $megabytes = (int) round($maxBytes / 1024 / 1024);
+
+        return new self("Ce dossier dépasse {$megabytes} Mo : téléchargez ses fichiers un par un.", 'archive_too_large', 413);
+    }
+
+    public static function archivesUnavailable(): self
+    {
+        return new self('Le téléchargement en ZIP n’est pas disponible sur ce serveur (extension zip absente).', 'archives_unavailable', 501);
+    }
+
     /**
      * JSON `{error, message}` for API calls; the default rendering otherwise.
      */

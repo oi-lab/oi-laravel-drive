@@ -10,6 +10,7 @@ use OiLab\OiLaravelDrive\Data\DriveFileData;
 use OiLab\OiLaravelDrive\Data\DriveFolderData;
 use OiLab\OiLaravelDrive\Data\UserSummaryData;
 use OiLab\OiLaravelDrive\Models\Drive;
+use OiLab\OiLaravelDrive\OiLaravelDrive;
 
 /**
  * Turns drives, folders and files into their Data objects, with the
@@ -44,11 +45,17 @@ class DrivePresenter
             return [];
         }
 
-        $folders->first()->newCollection($folders->all())->loadMissing([
+        $collection = $folders->first()->newCollection($folders->all())->loadMissing([
             'driveEntry.user',
             'driveEntry.drive',
             'parent' => fn ($query) => $query->withTrashed(),
         ]);
+
+        $collection->loadCount('driveShares');
+        $linked = OiLaravelDrive::linkModel()::query()
+            ->whereIn('folder_id', $collection->modelKeys())
+            ->pluck('folder_id')
+            ->flip();
 
         return $folders->map(fn (Folder $folder): DriveFolderData => new DriveFolderData(
             id: $folder->uuid,
@@ -60,6 +67,8 @@ class DrivePresenter
             updated_at: $folder->updated_at,
             deleted_at: $folder->deleted_at,
             props: $folder->props,
+            shares_count: (int) $folder->drive_shares_count,
+            has_link: $linked->has($folder->getKey()),
         ))->all();
     }
 
