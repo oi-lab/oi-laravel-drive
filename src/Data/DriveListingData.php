@@ -5,7 +5,9 @@ namespace OiLab\OiLaravelDrive\Data;
 use Spatie\LaravelData\Data;
 
 /**
- * The content of a folder, or of the root when `folder` is null.
+ * The content of a folder, or of the root when `folder` is null. `notice`
+ * is the folder's notice with its text (also listed in `files`), to show
+ * when the folder is empty.
  */
 class DriveListingData extends Data
 {
@@ -20,5 +22,6 @@ class DriveListingData extends Data
         public readonly array $breadcrumbs,
         public readonly array $folders,
         public readonly array $files,
+        public readonly ?DriveNoticeData $notice = null,
     ) {}
 }

@@ -309,6 +309,7 @@ class DriveShares
             breadcrumbs: array_values(array_slice($listing->breadcrumbs, $start === false ? 0 : $start)),
             folders: $listing->folders,
             files: $listing->files,
+            notice: $listing->notice,
         );
     }
 

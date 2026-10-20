@@ -5,6 +5,7 @@ namespace OiLab\OiLaravelDrive\Services;
 use Carbon\CarbonInterface;
 use finfo;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\File as HttpFile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -25,12 +26,18 @@ use OiLab\OiLaravelDrive\Events\DriveFileTrashed;
 use OiLab\OiLaravelDrive\Events\DriveFileUpdated;
 use OiLab\OiLaravelDrive\Exceptions\DriveException;
 use OiLab\OiLaravelDrive\Models\Drive;
+use OiLab\OiLaravelDrive\Models\DriveEntry;
 use OiLab\OiLaravelDrive\OiLaravelDrive;
 use Throwable;
 
 /**
  * Stores the files of a drive and files them in folders. A file filed in no
  * folder is at the root. Its type is read in its content, never in its name.
+ *
+ * Two kinds of files are kept by the host application: links (`link()`),
+ * which show the stored object of another model without copying it and never
+ * delete it, and notices (`notice()`), the markdown file explaining a folder.
+ * Locked files and sealed folders are refused to users (DriveLocks).
  */
 class DriveFiles
 {
@@ -51,6 +58,7 @@ class DriveFiles
     public function __construct(
         protected DriveManager $drives,
         protected DrivePresenter $presenter,
+        protected DriveLocks $locks,
     ) {}
 
     /**
@@ -124,6 +132,7 @@ class DriveFiles
     public function update(File $file, array $attributes): File
     {
         $this->assertNotTrashed($file);
+        $this->locks->assertUnlocked($file);
 
         if (array_key_exists('name', $attributes)) {
             $file->filename_download = $this->cleanFilename((string) $attributes['name']);
@@ -166,6 +175,8 @@ class DriveFiles
                     continue;
                 }
 
+                $this->locks->assertUnsealed($folder);
+
                 OiLaravelAttachments::attachmentModel()::query()->create([
                     'file_id' => $file->getKey(),
                     'attachable_type' => $folder->getMorphClass(),
@@ -196,6 +207,9 @@ class DriveFiles
     public function detach(File $file, iterable $folders): File
     {
         $drive = $this->drives->driveOf($file);
+        $filedIn = $this->folderIds($file);
+        $folders = collect($folders)->filter(fn (Folder $folder): bool => in_array($folder->getKey(), $filedIn, true));
+        $folders->each(fn (Folder $folder) => $this->locks->assertUnsealed($folder->loadMissing('driveEntry')));
 
         foreach ($folders as $folder) {
             $deleted = OiLaravelAttachments::attachmentModel()::query()
@@ -240,6 +254,9 @@ class DriveFiles
      */
     public function delete(File $file, bool $force = false): void
     {
+        $this->locks->assertUnlocked($file);
+        $file->driveFolders()->with('driveEntry')->get()->each(fn (Folder $folder) => $this->locks->assertUnsealed($folder));
+
         if ($force || ! OiLaravelDrive::usesTrash()) {
             $this->destroy($file);
 
@@ -271,12 +288,14 @@ class DriveFiles
     }
 
     /**
-     * Deletes a file for good, its content removed from the disk.
+     * Deletes a file for good, its content removed from the disk (never the
+     * object of a link, which belongs to its source).
      */
     public function destroy(File $file): void
     {
         $drive = $this->drives->driveOf($file);
         $data = $this->presenter->file($file);
+        $isLink = $this->drives->entryOf($file)->isLink();
 
         DB::transaction(function () use ($file): void {
             OiLaravelAttachments::attachmentModel()::query()->where('file_id', $file->getKey())->delete();
@@ -284,9 +303,193 @@ class DriveFiles
             $file->forceDelete();
         });
 
-        rescue(fn () => Storage::disk($file->storage)->delete($file->filename_disk), report: false);
+        if (! $isLink) {
+            rescue(fn () => Storage::disk($file->storage)->delete($file->filename_disk), report: false);
+        }
 
         event(new DriveFileDeleted($data, $drive));
+    }
+
+    /**
+     * The link showing `$source` in the drive: the stored object at `$path`,
+     * never copied, never deleted with the link. Created when missing, then
+     * kept in step (name, object, folders: exactly `$folders`) on each call,
+     * brought back from the trash. Locked by default.
+     *
+     * @param  iterable<Folder>  $folders
+     *
+     * @throws DriveException
+     */
+    public function link(
+        Drive $drive,
+        Model $source,
+        string $path,
+        string $name,
+        iterable $folders = [],
+        ?string $disk = null,
+        ?string $mimetype = null,
+        ?int $size = null,
+        ?string $title = null,
+        ?CarbonInterface $createdAt = null,
+        bool $locked = true,
+        ?Authenticatable $owner = null,
+    ): File {
+        return DriveLocks::bypass(function () use ($drive, $source, $path, $name, $folders, $disk, $mimetype, $size, $title, $createdAt, $locked, $owner): File {
+            $disk ??= OiLaravelDrive::disk();
+            $file = $this->drives->linksOf($source, $drive, withTrashed: true)->first();
+
+            if ($file === null) {
+                $this->drives->assertMember($drive, $owner);
+
+                $file = DB::transaction(function () use ($drive, $source, $path, $name, $disk, $mimetype, $size, $title, $createdAt, $locked, $owner): File {
+                    $file = OiLaravelDrive::fileModel()::query()->make([
+                        'filename_disk' => $path,
+                        'filename_download' => $this->cleanFilename($name),
+                        'title' => $title,
+                        'mimetype' => $mimetype ?? $this->storedMime($disk, $path),
+                        'filesize' => $size ?? $this->storedSize($disk, $path),
+                        'storage' => $disk,
+                    ]);
+
+                    if ($createdAt !== null) {
+                        $file->created_at = $createdAt;
+                    }
+
+                    $file->save();
+                    $this->drives->createEntry($drive, $file, $owner, $createdAt)->fill([
+                        'source_type' => $source->getMorphClass(),
+                        'source_id' => $source->getKey(),
+                        'locked' => $locked,
+                    ])->save();
+
+                    return $file;
+                });
+
+                event(new DriveFileCreated($file, $drive));
+            } else {
+                if ($file->trashed()) {
+                    $this->restore($file);
+                }
+
+                $moved = $file->filename_disk !== $path || $file->storage !== $disk;
+                $file->fill([
+                    'filename_disk' => $path,
+                    'storage' => $disk,
+                    'filename_download' => $this->cleanFilename($name),
+                    'title' => $title,
+                ]);
+
+                if ($moved) {
+                    $file->mimetype = $mimetype ?? $this->storedMime($disk, $path);
+                    $file->filesize = $size ?? $this->storedSize($disk, $path);
+                }
+
+                if ($file->isDirty()) {
+                    $file->save();
+                    event(new DriveFileUpdated($file, $drive));
+                }
+
+                $entry = $this->drives->entryOf($file)->fill(['locked' => $locked]);
+
+                if ($entry->isDirty()) {
+                    $entry->save();
+                }
+            }
+
+            return $this->sync($file, $folders);
+        });
+    }
+
+    /**
+     * Deletes for good the links showing `$source` (in one drive or all);
+     * the stored object stays with its source.
+     *
+     * @return int The number of links deleted
+     */
+    public function unlink(Model $source, ?Drive $drive = null): int
+    {
+        $links = $this->drives->linksOf($source, $drive, withTrashed: true);
+
+        DriveLocks::bypass(fn () => $links->each(fn (File $file) => $this->destroy($file)));
+
+        return $links->count();
+    }
+
+    /**
+     * Writes the notice of a folder (null: the root of the drive), a locked
+     * markdown file explaining what the folder is for. Created when missing,
+     * rewritten when its text or name changed.
+     *
+     * @throws DriveException
+     */
+    public function notice(Drive $drive, ?Folder $folder, string $markdown, string $name = 'Notice.md', ?Authenticatable $owner = null): File
+    {
+        return DriveLocks::bypass(function () use ($drive, $folder, $markdown, $name, $owner): File {
+            $file = $this->drives->noticeOf($drive, $folder);
+
+            if ($file === null) {
+                $file = $this->storeContent($drive, $markdown, $name, $folder ? [$folder] : [], $owner);
+                $this->drives->entryOf($file)->fill(['role' => DriveEntry::ROLE_NOTICE, 'locked' => true])->save();
+
+                return $file;
+            }
+
+            if ($file->md5 !== md5($markdown)) {
+                $this->replaceContent($file, $markdown);
+            }
+
+            return $this->update($file, ['name' => $name]);
+        });
+    }
+
+    /**
+     * Replaces the stored content of a file of the drive (not of a link).
+     *
+     * @throws DriveException
+     */
+    protected function replaceContent(File $file, string $content): void
+    {
+        if ($this->drives->entryOf($file)->isLink()) {
+            throw DriveException::locked();
+        }
+
+        $path = (string) tempnam(sys_get_temp_dir(), 'oi-drive-');
+        file_put_contents($path, $content);
+
+        try {
+            $mime = $this->assertAcceptable($path);
+            $old = $file->filename_disk;
+            $extension = pathinfo($old, PATHINFO_EXTENSION);
+            $directory = OiLaravelDrive::directory().'/'.$this->drives->driveOf($file)->uuid;
+            $diskName = Str::uuid().($extension !== '' ? '.'.$extension : '');
+
+            Storage::disk($file->storage)->putFileAs($directory, new HttpFile($path), $diskName);
+
+            $file->fill([
+                'filename_disk' => $directory.'/'.$diskName,
+                'mimetype' => $mime,
+                'filesize' => (int) filesize($path),
+                'md5' => md5_file($path) ?: null,
+            ])->save();
+
+            rescue(fn () => Storage::disk($file->storage)->delete($old), report: false);
+        } finally {
+            @unlink($path);
+        }
+
+        event(new DriveFileUpdated($file, $this->drives->driveOf($file)));
+    }
+
+    protected function storedSize(string $disk, string $path): int
+    {
+        return (int) rescue(fn () => Storage::disk($disk)->size($path), 0, report: false);
+    }
+
+    protected function storedMime(string $disk, string $path): string
+    {
+        $mime = rescue(fn () => Storage::disk($disk)->mimeType($path), null, report: false);
+
+        return is_string($mime) && $mime !== '' ? $mime : 'application/octet-stream';
     }
 
     /**
@@ -417,7 +620,10 @@ class DriveFiles
     ): File {
         $mime = $this->assertAcceptable($path);
         $folders = collect($folders)->values();
-        $folders->each(fn (Folder $folder) => $this->folderService()->assertUsable($folder, $drive));
+        $folders->each(function (Folder $folder) use ($drive): void {
+            $this->folderService()->assertUsable($folder, $drive);
+            $this->locks->assertUnsealed($folder->loadMissing('driveEntry'));
+        });
 
         $owner ??= Auth::user();
         $this->drives->assertMember($drive, $owner);

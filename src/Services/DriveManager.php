@@ -230,6 +230,58 @@ class DriveManager
             ->firstOrFail();
     }
 
+    /**
+     * The folder the host application keeps under this key in the drive.
+     */
+    public function folderByKey(Drive $drive, string $key, bool $withTrashed = false): ?Folder
+    {
+        return $this->folderQuery($drive)
+            ->when($withTrashed, fn (Builder $query) => $query->withTrashed())
+            ->whereHas('driveEntry', fn (Builder $query) => $query->where('key', $key))
+            ->first();
+    }
+
+    /**
+     * The file the host application keeps under this key in the drive.
+     */
+    public function fileByKey(Drive $drive, string $key, bool $withTrashed = false): ?File
+    {
+        return $this->fileQuery($drive)
+            ->when($withTrashed, fn (Builder $query) => $query->withTrashed())
+            ->whereHas('driveEntry', fn (Builder $query) => $query->where('key', $key))
+            ->first();
+    }
+
+    /**
+     * The linked files showing this model, in every drive or in one.
+     *
+     * @return Collection<int, File>
+     */
+    public function linksOf(Model $source, ?Drive $drive = null, bool $withTrashed = false): Collection
+    {
+        return OiLaravelDrive::fileModel()::query()
+            ->when($withTrashed, fn (Builder $query) => $query->withTrashed())
+            ->whereHas('driveEntry', fn (Builder $query) => $query
+                ->where('source_type', $source->getMorphClass())
+                ->where('source_id', $source->getKey())
+                ->when($drive, fn (Builder $query) => $query->where('drive_id', $drive->getKey())))
+            ->get();
+    }
+
+    /**
+     * The notice of a folder (null: the root), the first if there are several.
+     */
+    public function noticeOf(Drive $drive, ?Folder $folder): ?File
+    {
+        $query = $folder === null ? $this->rootFileQuery($drive) : $this->fileQuery($drive)
+            ->whereHas('driveFolders', fn (Builder $query) => $query->whereKey($folder->getKey()));
+
+        return $query
+            ->whereHas('driveEntry', fn (Builder $query) => $query->where('role', DriveEntry::ROLE_NOTICE))
+            ->oldest('id')
+            ->first();
+    }
+
     public function entryOf(Folder|File $item): DriveEntry
     {
         return $item->driveEntry ?? throw (new ModelNotFoundException)->setModel($item::class, [$item->getKey()]);
@@ -252,8 +304,11 @@ class DriveManager
 
         $files = ($folder === null ? $this->rootFileQuery($drive) : $this->fileQuery($drive)
             ->whereHas('driveFolders', fn (Builder $query) => $query->whereKey($folder->getKey())))
+            ->with('driveEntry')
             ->orderBy('filename_download')
             ->get();
+
+        $notice = $files->first(fn (File $file): bool => (bool) $file->driveEntry?->isNotice());
 
         return new DriveListingData(
             drive: $this->presenter->drive($drive),
@@ -261,6 +316,7 @@ class DriveManager
             breadcrumbs: $folder ? $this->breadcrumbs($folder) : [],
             folders: $this->presenter->folders($folders),
             files: $this->presenter->files($files),
+            notice: $notice ? $this->presenter->notice($notice) : null,
         );
     }
 

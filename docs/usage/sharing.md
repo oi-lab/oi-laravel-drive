@@ -2,7 +2,7 @@
 title: "Sharing"
 description: "Share a folder with other entities, open a public link with a password, download a folder as a ZIP"
 section: usage
-order: 5
+order: 6
 ---
 
 # Sharing

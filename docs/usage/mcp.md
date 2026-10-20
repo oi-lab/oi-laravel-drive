@@ -2,7 +2,7 @@
 title: "MCP Tools"
 description: "Register the drive tools in a laravel/mcp server"
 section: usage
-order: 7
+order: 8
 ---
 
 # MCP Tools

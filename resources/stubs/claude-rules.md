@@ -6,7 +6,10 @@ builds on oi-laravel-attachments: folders and files are the attachments `Folder`
 through attachments (no folder: the root). Work through `DriveManager`, `DriveFolders` and `DriveFiles`
 (never write `drive_entries` or the `drive` attachments by hand), register `DriveTools::all()` in the MCP
 server, and listen to the `Drive*` events to index or audit. Folder sharing (other entities, public link with
-password, ZIP) goes through `DriveShares`, `DriveLinks` and `DriveArchives`.
+password, ZIP) goes through `DriveShares`, `DriveLinks` and `DriveArchives`. Items the application generates are
+kept by key (`DriveFolders::ensure()`), locked or sealed (`DriveLocks`, changed by the host inside
+`DriveLocks::bypass()`); `DriveFiles::link()` shows another model's stored object without copying it and
+`DriveFiles::notice()` writes the markdown notice of a folder.
 
 - IMPORTANT: Activate `oilab-laravel-drive` when working on drives, folders or files of an entity, the
   drive API or MCP tools, the trash, upload links, folder sharing or public links, or search indexing of drive content in this application.

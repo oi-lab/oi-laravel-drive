@@ -9,7 +9,7 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
-#[Description('Liste le contenu d’un dossier du drive (sous-dossiers et fichiers), ou de la racine sans folder_id. Un fichier rangé dans aucun dossier est à la racine ; un même fichier peut être rangé dans plusieurs dossiers (folder_ids). Donne aussi le chemin (breadcrumbs).')]
+#[Description('Liste le contenu d’un dossier du drive (sous-dossiers et fichiers), ou de la racine sans folder_id. Un fichier rangé dans aucun dossier est à la racine ; un même fichier peut être rangé dans plusieurs dossiers (folder_ids). Donne aussi le chemin (breadcrumbs) et la notice du dossier (notice : son texte markdown, qui explique à quoi sert le dossier et ce qu’on y range). Les éléments locked sont gérés par l’application (ni renommage, ni déplacement, ni suppression) ; on n’ajoute ni ne retire rien d’un dossier sealed.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class ListDriveFolder extends DriveTool

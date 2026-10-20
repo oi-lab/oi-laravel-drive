@@ -8,6 +8,7 @@ use OiLab\OiLaravelAttachments\Models\Folder;
 use OiLab\OiLaravelDrive\Data\DriveData;
 use OiLab\OiLaravelDrive\Data\DriveFileData;
 use OiLab\OiLaravelDrive\Data\DriveFolderData;
+use OiLab\OiLaravelDrive\Data\DriveNoticeData;
 use OiLab\OiLaravelDrive\Data\UserSummaryData;
 use OiLab\OiLaravelDrive\Models\Drive;
 use OiLab\OiLaravelDrive\OiLaravelDrive;
@@ -69,6 +70,9 @@ class DrivePresenter
             props: $folder->props,
             shares_count: (int) $folder->drive_shares_count,
             has_link: $linked->has($folder->getKey()),
+            key: $folder->driveEntry?->key,
+            locked: (bool) $folder->driveEntry?->locked,
+            sealed: (bool) $folder->driveEntry?->sealed,
         ))->all();
     }
 
@@ -107,6 +111,23 @@ class DrivePresenter
             updated_at: $file->updated_at,
             deleted_at: $file->deleted_at,
             props: $file->props,
+            key: $file->driveEntry?->key,
+            role: $file->driveEntry?->role,
+            locked: (bool) $file->driveEntry?->locked,
+            is_link: (bool) $file->driveEntry?->isLink(),
+            source_type: $file->driveEntry?->source_type,
+            source_id: $file->driveEntry?->source_id !== null ? (string) $file->driveEntry->source_id : null,
         ))->all();
+    }
+
+    /**
+     * The notice of a folder with its markdown text.
+     */
+    public function notice(File $file): DriveNoticeData
+    {
+        return new DriveNoticeData(
+            file: $this->file($file),
+            text: app(DriveFiles::class)->text($file)['text'] ?? '',
+        );
     }
 }

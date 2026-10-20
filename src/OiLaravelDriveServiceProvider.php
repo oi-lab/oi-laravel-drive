@@ -16,6 +16,7 @@ use OiLab\OiLaravelDrive\Services\DriveArchives;
 use OiLab\OiLaravelDrive\Services\DriveFiles;
 use OiLab\OiLaravelDrive\Services\DriveFolders;
 use OiLab\OiLaravelDrive\Services\DriveLinks;
+use OiLab\OiLaravelDrive\Services\DriveLocks;
 use OiLab\OiLaravelDrive\Services\DriveManager;
 use OiLab\OiLaravelDrive\Services\DrivePresenter;
 use OiLab\OiLaravelDrive\Services\DriveRelations;
@@ -37,7 +38,7 @@ class OiLaravelDriveServiceProvider extends ServiceProvider
             config('oi-laravel-drive.sharing.targets', AnyShareTarget::class)
         ));
 
-        foreach ([DrivePresenter::class, DriveManager::class, DriveFiles::class, DriveFolders::class, DriveUploads::class, DriveShares::class, DriveLinks::class, DriveArchives::class] as $service) {
+        foreach ([DrivePresenter::class, DriveLocks::class, DriveManager::class, DriveFiles::class, DriveFolders::class, DriveUploads::class, DriveShares::class, DriveLinks::class, DriveArchives::class] as $service) {
             $this->app->scoped($service);
         }
     }

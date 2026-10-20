@@ -5,6 +5,17 @@ All notable changes to `oi-lab/oi-laravel-drive` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-20
+
+### Added
+
+- Managed items: `key`, `role`, `source` and `locked` / `sealed` flags on `drive_entries` (migration)
+- `DriveFolders::ensure()` keeping a folder by key (created, restored, renamed and moved back), `DriveManager::folderByKey()` / `fileByKey()`
+- `DriveLocks`: locked items cannot be renamed, moved or deleted, sealed folders take no folder or file and lose none; `DriveLocks::bypass()` for the host; rules `locked`, `locked_content`, `sealed` (HTTP 403)
+- Linked files (`DriveFiles::link()` / `unlink()`, `DriveManager::linksOf()`): another model's stored object shown without copy, never deleted with the link
+- Folder notices (`DriveFiles::notice()`, `DriveManager::noticeOf()`): a locked `Notice.md`, given with its text in `DriveListingData::notice` (`DriveNoticeData`)
+- `key`, `locked`, `sealed` on `DriveFolderData`; `key`, `role`, `locked`, `is_link`, `source_type`, `source_id` on `DriveFileData`
+
 ## [1.1.0] - 2026-10-17
 
 ### Added

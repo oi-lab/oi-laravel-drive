@@ -21,6 +21,7 @@ A file space with folders for any entity of your Laravel application — a Team,
 - **Sharing** — share a folder read-only with other entities, or open a public link with an optional password and expiry date; download a folder as a ZIP
 - **MCP tools** — 16 tools for `laravel/mcp` servers, including one-time upload links for binaries
 - **Events** — one per action, to index, notify or audit from other modules
+- **Managed items** — folders the host keeps by key (`ensure()`), locked and sealed items, linked files showing another model's stored object without copying it, folder notices in markdown
 - **Pluggable access** — a resolver for the current entity and its members, a replaceable policy
 
 ## How It Works
@@ -132,6 +133,23 @@ $files->delete($file);                             // from every folder, to the 
 ['url' => $url] = $files->downloadUrl($file);      // temporary link
 $text = $files->text($note);                       // ['text' => …, 'truncated' => false]
 ```
+
+### Managed items
+
+```php
+use OiLab\OiLaravelDrive\Services\DriveLocks;
+
+$year = $folders->ensure($drive, 'fy:2026', '2026');                       // by key, idempotent, locked
+$month = $folders->ensure($drive, 'fy:2026/sales/01', '2026-01', $year, sealed: true);
+
+$files->link($drive, $invoice, $invoice->pdf_path, '20260115_acme_F-1.pdf', [$month]); // no copy
+$files->unlink($invoice);                                                    // the object stays
+$files->notice($drive, $year, "# Exercice 2026\n\nCe que contient ce dossier…");    // Notice.md
+
+DriveLocks::bypass(fn () => $folders->delete($month));                       // the host's own changes
+```
+
+Users (API, MCP) cannot rename, move or delete a `locked` item, nor add to or take out of a `sealed` folder. A listing gives the folder's `notice` with its text.
 
 ### Listings, search, trash, owners
 

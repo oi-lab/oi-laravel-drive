@@ -25,6 +25,9 @@ use OiLab\OiLaravelDrive\OiLaravelDrive;
  * drive. Deleting a folder takes its subfolders; its files go with it only
  * when asked, and only those filed nowhere else: a file also filed in
  * another folder is simply taken out of the deleted ones.
+ *
+ * Locked folders and sealed parents are refused (DriveLocks); `ensure()`
+ * creates or brings back the folders the host application generates.
  */
 class DriveFolders
 {
@@ -32,6 +35,7 @@ class DriveFolders
         protected DriveManager $drives,
         protected DriveFiles $files,
         protected DrivePresenter $presenter,
+        protected DriveLocks $locks,
     ) {}
 
     /**
@@ -51,6 +55,7 @@ class DriveFolders
 
         if ($parent !== null) {
             $this->assertUsable($parent, $drive);
+            $this->locks->assertUnsealed($parent);
         }
 
         $this->assertNameAvailable($drive, $name, $parent?->getKey());
@@ -90,6 +95,7 @@ class DriveFolders
     public function update(Folder $folder, ?string $name = null, ?array $props = null): Folder
     {
         $this->assertNotTrashed($folder);
+        $this->locks->assertUnlocked($folder);
         $drive = $this->drives->driveOf($folder);
 
         if ($name !== null) {
@@ -124,8 +130,16 @@ class DriveFolders
         $this->assertNotTrashed($folder);
         $drive = $this->drives->driveOf($folder);
 
+        if ($folder->parent_id === $parent?->getKey()) {
+            return $folder;
+        }
+
+        $this->locks->assertUnlocked($folder);
+        $this->locks->assertUnsealed($this->parentOf($folder));
+
         if ($parent !== null) {
             $this->assertUsable($parent, $drive);
+            $this->locks->assertUnsealed($parent);
 
             if (in_array($parent->getKey(), $this->subtreeIds($folder, withTrashed: true), true)) {
                 throw DriveException::cyclicMove();
@@ -134,10 +148,6 @@ class DriveFolders
 
         $from = $folder->parent_id;
         $to = $parent?->getKey();
-
-        if ($from === $to) {
-            return $folder;
-        }
 
         $this->assertNameAvailable($drive, $folder->name, $to, $folder->getKey());
 
@@ -158,6 +168,11 @@ class DriveFolders
      */
     public function delete(Folder $folder, bool $withFiles = false, bool $force = false): void
     {
+        $this->locks->assertUnlocked($folder);
+        $this->locks->assertUnsealed($this->parentOf($folder));
+        $tree = $this->subtreeIds($folder, withTrashed: true);
+        $this->locks->assertTreeUnlocked($tree, $withFiles ? $this->exclusiveFiles($this->drives->driveOf($folder), $tree, withTrashedFolders: true) : null);
+
         if ($force || ! OiLaravelDrive::usesTrash()) {
             $this->destroy($folder, $withFiles);
 
@@ -282,6 +297,58 @@ class DriveFolders
         foreach ($events as $event) {
             event($event);
         }
+    }
+
+    /**
+     * The folder the host application keeps under `$key`: created when missing,
+     * brought back from the trash, renamed and moved to match `$name` and
+     * `$parent`, locks set. Users' changes are undone: the host decides.
+     *
+     * @throws DriveException
+     */
+    public function ensure(
+        Drive $drive,
+        string $key,
+        string $name,
+        ?Folder $parent = null,
+        bool $locked = true,
+        bool $sealed = false,
+        ?Authenticatable $owner = null,
+    ): Folder {
+        return DriveLocks::bypass(function () use ($drive, $key, $name, $parent, $locked, $sealed, $owner): Folder {
+            $name = $this->cleanName($name);
+            $folder = $this->drives->folderByKey($drive, $key, withTrashed: true);
+
+            if ($folder === null) {
+                $folder = $this->create($drive, $this->availableName($drive, $name, $parent?->getKey()), $parent, $owner);
+            } else {
+                if ($folder->trashed()) {
+                    $this->restore($folder);
+                }
+
+                $this->move($folder, $parent);
+
+                if ($folder->name !== $name) {
+                    $this->update($folder, $this->availableName($drive, $name, $folder->parent_id, $folder->getKey()));
+                }
+            }
+
+            $entry = $this->drives->entryOf($folder);
+            $entry->fill(['key' => $key, 'locked' => $locked, 'sealed' => $sealed]);
+
+            if ($entry->isDirty()) {
+                $entry->save();
+            }
+
+            return $folder;
+        });
+    }
+
+    protected function parentOf(Folder $folder): ?Folder
+    {
+        return $folder->parent_id === null
+            ? null
+            : OiLaravelDrive::folderModel()::query()->with('driveEntry')->find($folder->parent_id);
     }
 
     /**

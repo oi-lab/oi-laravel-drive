@@ -53,6 +53,21 @@ class DriveException extends RuntimeException
         return new self('Cet élément n’est pas dans la corbeille.', 'not_trashed');
     }
 
+    public static function locked(): self
+    {
+        return new self('Cet élément est géré par l’application : il ne peut être ni renommé, ni déplacé, ni supprimé.', 'locked', 403);
+    }
+
+    public static function lockedContent(): self
+    {
+        return new self('Ce dossier contient des éléments gérés par l’application : il ne peut pas être supprimé.', 'locked_content', 403);
+    }
+
+    public static function sealed(string $name): self
+    {
+        return new self("Le contenu du dossier « {$name} » est géré par l’application : on ne peut pas y ajouter ni en retirer d’éléments.", 'sealed', 403);
+    }
+
     public static function notMember(): self
     {
         return new self('Ce propriétaire n’est pas membre de l’entité du drive.', 'owner_not_member');
